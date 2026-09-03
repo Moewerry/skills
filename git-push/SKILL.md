@@ -1,6 +1,6 @@
 ---
 name: git-push
-description: Safely push local Git commits to the remote repository after checking whether the upstream branch has unpulled commits. Use when the user asks to push code, upload code, submit code, sync commits, push local commits, or says phrases like "推送代码", "上传代码", "提交到仓库", "同步到远端", "push code", or "git push". The workflow fetches remote state, rebases local commits onto upstream when needed, resolves conflicts that are semantically clear, asks the user to choose among concrete resolution options when intent is ambiguous, and then pushes the local commits.
+description: Safely push local Git commits to all relevant remotes after checking whether remote branches have unpulled commits. Use when the user asks to push code, upload code, submit code, sync commits, push local commits, or says phrases like "推送代码", "上传代码", "提交到仓库", "同步到远端", "push code", or "git push". The workflow fetches every remote, rebases local commits onto the upstream branch when needed, detects ambiguous multi-remote divergence, resolves conflicts that are semantically clear, asks the user to choose when intent is ambiguous, and then pushes local commits to each safe target remote.
 ---
 
 # Git Push
@@ -32,26 +32,35 @@ description: Safely push local Git commits to the remote repository after checki
    ```
    If there is no upstream branch, stop and ask the user to set an upstream or specify the remote branch. Do not guess a remote branch.
 
-5. Fetch remote state:
+5. Fetch every remote state:
    ```bash
-   git fetch --prune
+   git fetch --all --prune
    ```
 
-6. Compare local branch and upstream:
+6. Discover relevant remote branches for the current branch:
    ```bash
-   git rev-list --left-right --count @{u}...HEAD
+   branch="$(git branch --show-current)"
+   git for-each-ref --format='%(refname:short)' "refs/remotes/*/$branch"
    ```
-   Interpret output as `<behind> <ahead>`.
+   Treat every remote branch with the same branch name as a push target, excluding symbolic references such as `origin/HEAD`. Always include the configured upstream branch. If the user explicitly names remotes or remote branches, use only those targets after verifying they exist. If no relevant remote branch exists beyond an upstream that also cannot be resolved, stop and ask the user to specify the target.
 
-7. Decide the next Git action:
-   - If `<behind>` is `0`, do not pull. Push local commits directly.
-   - If `<behind>` is greater than `0`, rebase local commits onto upstream:
+7. Compare local branch and every target remote branch:
+   ```bash
+   git rev-list --left-right --count <remote>/<branch>...HEAD
+   ```
+   Interpret output as `<behind> <ahead>` for each remote target.
+
+8. Decide the next Git action:
+   - If every target has `<behind>` equal to `0`, do not pull. Push local commits directly to each target whose `<ahead>` is greater than `0`.
+   - If the upstream target has `<behind>` greater than `0`, rebase local commits onto upstream:
      ```bash
      git pull --rebase
      ```
-   - If `<ahead>` is `0` after the rebase or before push, report that there are no local commits to push.
+     After the rebase, fetch again if needed and recompute ahead/behind for every target before pushing.
+   - If a non-upstream target has `<behind>` greater than `0` after the upstream rebase check, stop and report that the remote contains commits not present locally. Do not merge or rebase across multiple remote histories unless the user explicitly chooses that remote integration strategy.
+   - If every target has `<ahead>` equal to `0` after any required rebase, report that there are no local commits to push.
 
-8. Handle rebase conflicts by intent:
+9. Handle rebase conflicts by intent:
    - Inspect conflict files with:
      ```bash
      git status --short
@@ -69,19 +78,20 @@ description: Safely push local Git commits to the remote repository after checki
      ```
    - Do not run `git rebase --abort` unless the user asks.
 
-9. Push local commits:
+10. Push local commits to every safe target remote:
    ```bash
-   git push
+   git push <remote> HEAD:<branch>
    ```
-   If the push is rejected because the remote advanced again, repeat from the fetch/compare step once. If it fails again, stop and report the reason.
+   Push targets one at a time. If a push target already has `<ahead>` equal to `0`, skip it and report it as already up to date. If a push is rejected because that remote advanced again, repeat from the fetch/compare step once for all targets. If it fails again, stop and report which remote failed and why.
 
-10. Report the final result concisely, including whether a rebase happened and whether the push succeeded.
+11. Report the final result concisely, including whether a rebase happened, which remotes were pushed, which were already up to date, and whether any remote was skipped or blocked.
 
 ## Safety Rules
 
 - Never run destructive commands such as `git reset --hard`, `git checkout -- <file>`, `git clean`, or `git rebase --abort` unless explicitly requested.
 - Never force push unless the user explicitly asks and confirms the exact branch.
 - Never create commits in this workflow. If local changes are uncommitted, stop and ask the user to commit or stash them first.
+- Never assume remote histories are interchangeable. If different remotes contain different unseen commits, stop and ask the user how to reconcile them.
 - Prefer correctness over completion. When conflict resolution is not objectively clear, explain the viable choices and wait for the user's decision.
 - Do not run project builds, compilers, tests, or syntax checks unless the user explicitly requests them. If validation would normally be useful, tell the user the command to run.
 
