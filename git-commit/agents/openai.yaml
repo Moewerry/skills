@@ -1,4 +1,4 @@
 interface:
   display_name: "Git Commit"
-  short_description: "根据当前 Git 改动生成中文规范信息并创建提交"
-  default_prompt: "Use $git-commit when I say 提交代码 to stage current changes and create a Chinese Conventional Commit."
+  short_description: "检查隐私并默认排除非 README 文档后创建中文规范提交"
+  default_prompt: "Use $git-commit to screen changes for private information, exclude documentation other than README.md unless explicitly requested, and create a Chinese Conventional Commit from eligible changes."

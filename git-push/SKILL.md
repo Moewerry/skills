@@ -1,6 +1,6 @@
 ---
 name: git-push
-description: Safely push local Git commits to all relevant remotes after checking whether remote branches have unpulled commits. Use when the user asks to push code, upload code, submit code, sync commits, push local commits, or says phrases like "推送代码", "上传代码", "提交到仓库", "同步到远端", "push code", or "git push". The workflow fetches every remote, rebases local commits onto the upstream branch when needed, detects ambiguous multi-remote divergence, resolves conflicts that are semantically clear, asks the user to choose when intent is ambiguous, and then pushes local commits to each safe target remote.
+description: Safely push local Git commits after reconciling remote changes and screening outgoing history for private information and unrequested documentation other than README.md. Use when the user asks to push code, upload code, sync commits, or says "推送代码", "上传代码", "提交到仓库", "同步到远端", "push code", or "git push". Stop when history contains excluded content or remote integration is ambiguous.
 ---
 
 # Git Push
@@ -78,13 +78,27 @@ description: Safely push local Git commits to all relevant remotes after checkin
      ```
    - Do not run `git rebase --abort` unless the user asks.
 
-10. Push local commits to every safe target remote:
+10. Before pushing, review every outgoing commit for each target remote, including intermediate snapshots rather than only the final branch diff:
+    ```bash
+    git log --format=oneline <remote>/<branch>..HEAD
+    git diff --name-status <remote>/<branch>...HEAD
+    ```
+    Inspect the file changes and added/modified file snapshots of every outgoing commit. For merge commits, also inspect merge resolutions and changes against their parents. A secret added in one commit and deleted in a later commit is still uploaded in history. Review commit messages and filenames for private information as well. Perform this check after any rebase or other history change and before the first push; check all targets before uploading to any of them.
+
+    Apply these defaults even if the commits were created outside this skill:
+    - Exclude private information unless the user explicitly requests retaining the specific information or affected files after its category is identified. Look for real credentials, tokens, private keys, cookies, personal data, internal addresses, and private paths; distinguish public metadata, placeholders, and environment-variable references using context. Generic permission to push or include all files is not an exception.
+    - Exclude explanatory documentation other than files with the case-insensitive basename `README.md`, unless the user explicitly requests the documents. Apply this to additions, edits, renames, and deletions. Source code and functional inputs such as `SKILL.md`, required skill references, agent instructions, and prompt templates remain eligible. README.md and functional files still require privacy review.
+    - Safe deletions of private information are eligible, but do not erase private values from earlier outgoing commits. Do not print sensitive values in tool output, chat, or logs; report only redacted categories and locations.
+
+    If outgoing history contains excluded content, automatically withhold the affected push and report the affected commits, paths, and categories. Do not silently rewrite existing commits, create cleanup commits that leave secrets in outgoing history, or force push. Explain that the local commits need to be recreated without the excluded content, or that a specific user exception is required. If review cannot complete reliably, stop and explain the limitation. Never claim that a final clean diff proves the history is safe.
+
+11. Push local commits to every safe target remote:
    ```bash
    git push <remote> HEAD:<branch>
    ```
    Push targets one at a time. If a push target already has `<ahead>` equal to `0`, skip it and report it as already up to date. If a push is rejected because that remote advanced again, repeat from the fetch/compare step once for all targets. If it fails again, stop and report which remote failed and why.
 
-11. Report the final result concisely, including whether a rebase happened, which remotes were pushed, which were already up to date, and whether any remote was skipped or blocked.
+12. Report the final result concisely, including whether a rebase happened, which remotes were pushed, which were already up to date, and whether any remote was skipped or blocked.
 
 ## Safety Rules
 

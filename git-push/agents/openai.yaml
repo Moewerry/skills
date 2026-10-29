@@ -1,4 +1,4 @@
 interface:
   display_name: "Git Push"
-  short_description: "拉取远端变更并 rebase 后推送本地提交到仓库"
-  default_prompt: "Use $git-push to rebase local commits onto the remote branch and push them safely."
+  short_description: "检查待推送历史的隐私与文档范围后安全同步远端"
+  default_prompt: "Use $git-push to reconcile remote changes, screen all outgoing commits for private information and unrequested documentation other than README.md, and push eligible history safely."
